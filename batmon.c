@@ -14,7 +14,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <dirent.h>
-#include <sys/stat.h>
 #include <libnotify/notify.h>
 
 // TODO:
@@ -62,10 +61,9 @@ int main (int argc, char** argv) {
     }
     struct dirent* entry = readdir(dir);
     struct dirent* next;
-    struct stat* s;
     int err;
     char buf[7];
-    const mem_blk = 50; // chars to allocate at a time
+    const int mem_blk = 50; // chars to allocate at a time
     char* bat_names = (char*) NULL;
     int n, n_max = 0, nbats = 0, nchars = 0, nalloc = 0;
     while (entry != (struct dirent*) NULL) {
