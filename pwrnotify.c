@@ -1,5 +1,5 @@
 /*
- * batmon version 0.1
+ * pwrnotify version 0.1
  *
  * a lightweight, standalone battery status notifier
  *
@@ -109,7 +109,7 @@ int main (int argc, char** argv) {
     char* fn = malloc(24 + n_max + 12 + 1);
     char body[26];
     int i, last = 100, q;
-    notify_init ("batmon");
+    notify_init ("pwrnotify");
     NotifyNotification* notification = notify_notification_new("", "", "");
     while (1) {
         q = get_charge(nbats, bat_names, fn);

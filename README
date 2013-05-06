@@ -1,11 +1,11 @@
-batmon 0.1.0.
+pwrnotify 0.1.0.
 
 A lightweight, standalone battery status notifier for Linux.
 
 Uses the newer `/sys/class' interface and doesn't support the deprecated
 (since 2.6.39) `/proc/acpi' one.
 
-http://ikn.org.uk/batmon
+http://ikn.org.uk/pwrnotify
 
     LICENSE
 
@@ -35,6 +35,6 @@ directory.  To uninstall, run
 
     USAGE
 
-Once installed, just run batmon (installed to /usr/local/bin/ by default). 
+Once installed, just run pwrnotify (installed to /usr/local/bin/ by default).
 Alternatively, you can just copy the executable elsewhere and run it without
 installing.

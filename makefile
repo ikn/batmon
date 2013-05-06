@@ -1,4 +1,4 @@
-PROG := batmon
+PROG := pwrnotify
 CFLAGS += -Wall
 CPPFLAGS += `pkg-config --cflags libnotify`
 LDLIBS += `pkg-config --libs libnotify`
