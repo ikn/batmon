@@ -1,6 +1,9 @@
-batmon 0.1.
+batmon 0.1.0.
 
-A lightweight, standalone battery status notifier.
+A lightweight, standalone battery status notifier for Linux.
+
+Uses the newer `/sys/class' interface and doesn't support the deprecated
+(since 2.6.39) `/proc/acpi' one.
 
 http://ikn.org.uk/batmon
 
