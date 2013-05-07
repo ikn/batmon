@@ -17,12 +17,64 @@
 #include <libnotify/notify.h>
 
 // TODO:
+// change notification's % when it changes, if visible ("closed" signal, but requires gtk_main())
+// recheck for batteries every now and then
 // (getopt/getopt_long)
 // args are comma-separated warn levels as integer percentages
 // -t --time (seconds between each check)
 // -r --reload (seconds between each recheck for batteries)
 // -b --background (fork off and die)
 // -l --legacy (use /proc/acpi/ instead of /sys/class/)
+
+void get_bats (char** bat_names, int* nbats, int* n_max) {
+    // get available power supplies
+    DIR* dir = opendir("/sys/class/power_supply/");
+    if (dir == (DIR*) NULL) {
+        *nbats = 0;
+        return;
+    }
+    struct dirent* entry = readdir(dir);
+    struct dirent* next;
+    int err;
+    char buf[7];
+    const int mem_blk = 50; // chars to allocate at a time
+    int n, nchars = 0, nalloc = 0;
+    *bat_names = NULL;
+    *nbats = 0;
+    *n_max = 0;
+    while (entry != (struct dirent*) NULL) {
+        // skip if . or ..
+        if (strcmp(entry->d_name, ".") != 0 &&
+            strcmp(entry->d_name, "..") != 0) {
+            n = strlen(entry->d_name);
+            // check supply's type
+            char* fn = malloc(24 + n + 5 + 1);
+            sprintf(fn, "/sys/class/power_supply/%s/type", entry->d_name);
+            FILE* f = fopen(fn, "r");
+            free(fn);
+            if (f != (FILE*) NULL) {
+                fread(buf, sizeof(char), 7, f);
+                fclose(f);
+                // skip if not a battery
+                if (strncmp(buf, "Battery", 7) == 0) { // buf has no \0
+                    (*nbats)++;
+                    while (nchars + n + 1 > nalloc) {
+                        // need more room for names
+                        nalloc += mem_blk;
+                        *bat_names = realloc(*bat_names, nalloc * sizeof(char));
+                    }
+                    strcpy(*bat_names + nchars, entry->d_name);
+                    nchars += n + 1;
+                    if (n > *n_max) *n_max = n;
+                }
+            }
+        }
+        err = readdir_r(dir, entry, &next);
+        if (err != 0) entry = (struct dirent*) NULL;
+        entry = next;
+    }
+    closedir(dir);
+}
 
 int get_charge (int n, char* names, char* fn) {
     // get total battery charge as integer percentage of maximum
@@ -53,51 +105,10 @@ int get_charge (int n, char* names, char* fn) {
 }
 
 int main (int argc, char** argv) {
-    // get available power supplies
-    DIR* dir = opendir("/sys/class/power_supply/");
-    if (dir == (DIR*) NULL) {
-        fprintf(stderr, "error: no power supplies detected\n");
-        return 1;
-    }
-    struct dirent* entry = readdir(dir);
-    struct dirent* next;
-    int err;
-    char buf[7];
-    const int mem_blk = 50; // chars to allocate at a time
-    char* bat_names = (char*) NULL;
-    int n, n_max = 0, nbats = 0, nchars = 0, nalloc = 0;
-    while (entry != (struct dirent*) NULL) {
-        // skip if . or ..
-        if (strcmp(entry->d_name, ".") != 0 &&
-            strcmp(entry->d_name, "..") != 0) {
-            n = strlen(entry->d_name);
-            // check supply's type
-            char* fn = malloc(24 + n + 5 + 1);
-            sprintf(fn, "/sys/class/power_supply/%s/type", entry->d_name);
-            FILE* f = fopen(fn, "r");
-            free(fn);
-            if (f != (FILE*) NULL) {
-                fread(buf, sizeof(char), 7, f);
-                fclose(f);
-                // skip if not a battery
-                if (strncmp(buf, "Battery", 7) == 0) { // buf has no \0
-                    nbats++;
-                    while (nchars + n + 1 > nalloc) {
-                        // need more room for names
-                        nalloc += mem_blk;
-                        bat_names = realloc(bat_names, nalloc * sizeof(char));
-                    }
-                    strcpy(bat_names + nchars, entry->d_name);
-                    nchars += n + 1;
-                    if (n > n_max) n_max = n;
-                }
-            }
-        }
-        err = readdir_r(dir, entry, &next);
-        if (err != 0) entry = (struct dirent*) NULL;
-        entry = next;
-    }
-    closedir(dir);
+    // get batteries
+    char* bat_names;
+    int nbats, n_max;
+    get_bats(&bat_names, &nbats, &n_max);
     if (nbats == 0) {
         fprintf(stderr, "error: no batteries detected\n");
         return 1;
@@ -108,7 +119,10 @@ int main (int argc, char** argv) {
     int delay = 20;
     char* fn = malloc(24 + n_max + 12 + 1);
     char body[26];
-    int i, last = 100, q;
+    int i, maxwarn = 0, last = 100, q;
+    for (i = 0; i < nwarn; i++) {
+        if (warn[i] > maxwarn) maxwarn = warn[i];
+    }
     notify_init ("pwrnotify");
     NotifyNotification* notification = notify_notification_new("", "", "");
     notify_notification_set_timeout(notification, NOTIFY_EXPIRES_NEVER);
@@ -126,6 +140,11 @@ int main (int argc, char** argv) {
                     // already shown: no need to check other warning levels
                     break;
                 }
+            }
+            if (last < maxwarn && q >= maxwarn) {
+                // newly above all warning levels: hide notification if visible
+                GError** e = NULL;
+                notify_notification_close(notification, e);
             }
             last = q;
         }
