@@ -1,4 +1,4 @@
-pwrnotify 0.1.0-next.
+pwrnotify 0.2.0.
 
 A lightweight, standalone battery status notifier for Linux.
 
@@ -35,6 +35,7 @@ directory.  To uninstall, run
 
     USAGE
 
-Once installed, just run pwrnotify (installed to /usr/local/bin/ by default).
-Alternatively, you can just copy the executable elsewhere and run it without
-installing.
+pwrnotify is installed to /usr/local/bin/ by default, and can be run from there
+or you can just copy the executable elsewhere and run it without installing.
+It takes any number of integer arguments as percentage battery levels to
+display a warning at.

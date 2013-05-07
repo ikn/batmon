@@ -1,5 +1,5 @@
 /*
- * pwrnotify version 0.1
+ * pwrnotify version 0.2.0
  *
  * a lightweight, standalone battery status notifier
  *
@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
 #include <stdio.h>
@@ -20,7 +21,6 @@
 // change notification's % when it changes, if visible ("closed" signal, but requires gtk_main())
 // recheck for batteries every now and then
 // (getopt/getopt_long)
-// args are comma-separated warn levels as integer percentages
 // -t --time (seconds between each check)
 // -r --reload (seconds between each recheck for batteries)
 // -b --background (fork off and die)
@@ -105,6 +105,48 @@ int get_charge (int n, char* names, char* fn) {
 }
 
 int main (int argc, char** argv) {
+    const char* version = "0.2.0";
+    // parse arguments
+    if (argc == 1) {
+        fprintf(stderr, "pwrnotify %s \n\
+\n\
+Takes any number of integer arguments as percentage battery levels to \n\
+display a warning at.\n\
+\n\
+Returns 1 if no batteries could be found, and 2 if invalid arguments are \
+given.\n\n", version);
+        return 0;
+    }
+    // read in warning levels; duplicates aren't a problem so don't bother
+    // checking for them
+    int err, i, j, n,val, nwarn = argc - 1;
+    char* warn = calloc(nwarn, sizeof(char)), *arg;
+    for (i = 0; i < nwarn; i++) {
+        err = 0;
+        arg = argv[i + 1];
+        n = strlen(arg);
+        if (n == 0) err = 1;
+        else {
+            for (j = 0; j < n; j++) {
+                if (!isdigit(arg[j])) {
+                    err = 1;
+                    break;
+                }
+            }
+        }
+        if (!err && sscanf(arg, "%d", &val) != 1) err = 1;
+        if (err) {
+            fprintf(stderr, "invalid argument '%s' (expected int)\n", arg);
+            return 2;
+        }
+        if (val < 0 || val > 100) {
+            fprintf(stderr, "invalid argument '%d' (expected percentage)\n",
+                    val);
+            return 2;
+        }
+        warn[i] = val;
+    }
+
     // get batteries
     char* bat_names;
     int nbats, n_max;
@@ -115,11 +157,9 @@ int main (int argc, char** argv) {
     }
 
     // periodic check
-    int nwarn = 3, warn[3] = {3, 5, 10};
     int delay = 20;
     char* fn = malloc(24 + n_max + 12 + 1);
-    char body[26];
-    int i, maxwarn = 0, last = 100, q;
+    char body[26], maxwarn = 0, last = 100, q;
     for (i = 0; i < nwarn; i++) {
         if (warn[i] > maxwarn) maxwarn = warn[i];
     }
