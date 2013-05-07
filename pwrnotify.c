@@ -105,27 +105,30 @@ int main (int argc, char** argv) {
 
     // periodic check
     int nwarn = 3, warn[3] = {3, 5, 10};
-    int delay = 30;
+    int delay = 20;
     char* fn = malloc(24 + n_max + 12 + 1);
     char body[26];
     int i, last = 100, q;
     notify_init ("pwrnotify");
     NotifyNotification* notification = notify_notification_new("", "", "");
+    notify_notification_set_timeout(notification, NOTIFY_EXPIRES_NEVER);
     while (1) {
         q = get_charge(nbats, bat_names, fn);
-        for (i = 0; i < nwarn; i++) {
-            if (last > warn[i] && q <= warn[i]) {
-                // dipped below a warning level: show notification
-                // should have 0 <= q <= 100, but use snprintf just in case
-                snprintf(body, 26, "Battery level is at %d%%.\n", q);
-                notify_notification_update(notification, "Low Battery", body,
-                                           "dialog-warning");
-                notify_notification_show(notification, (GError**) NULL);
-                // only warn once
-                continue;
+        if (last != q) {
+            for (i = 0; i < nwarn; i++) {
+                if (last >= warn[i] && q < warn[i]) {
+                    // dipped below a warning level: show notification
+                    // should have 0 <= q <= 100, but use snprintf just in case
+                    snprintf(body, 26, "Battery level is at %d%%.\n", q);
+                    notify_notification_update(notification, "Low Battery",
+                                               body, "dialog-warning");
+                    notify_notification_show(notification, (GError**) NULL);
+                    // already shown: no need to check other warning levels
+                    break;
+                }
             }
+            last = q;
         }
-        last = q;
         sleep(delay);
     }
 
