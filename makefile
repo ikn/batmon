@@ -4,7 +4,7 @@ CPPFLAGS += `pkg-config --cflags libnotify`
 LDLIBS += `pkg-config --libs libnotify`
 INSTALL_PROGRAM := install
 
-prefix := $(DESTDIR)/usr/local
+prefix := /usr/local
 exec_prefix := $(prefix)
 bindir := $(exec_prefix)/bin
 
@@ -18,8 +18,8 @@ clean:
 distclean: clean
 
 install:
-	mkdir -p "$(bindir)"
-	$(INSTALL_PROGRAM) "$(PROG)" "$(bindir)"
+	mkdir -p "$(DESTDIR)$(bindir)"
+	$(INSTALL_PROGRAM) "$(PROG)" "$(DESTDIR)$(bindir)"
 
 uninstall:
-	- $(RM) "$(bindir)/$(PROG)"
+	- $(RM) "$(DESTDIR)$(bindir)/$(PROG)"

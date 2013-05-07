@@ -18,6 +18,7 @@
 #include <libnotify/notify.h>
 
 // TODO:
+// if killed, close notification
 // change notification's % when it changes, if visible ("closed" signal, but requires gtk_main())
 // recheck for batteries every now and then
 // (getopt/getopt_long)
