@@ -1,5 +1,5 @@
 /*
- * pwrnotify version 0.2.0
+ * pwrnotify version 0.2.1
  *
  * a lightweight, standalone battery status notifier
  *
@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <libnotify/notify.h>
+
+static const char* version = "0.2.1";
 
 // TODO:
 // if killed, close notification
@@ -105,8 +107,31 @@ int get_charge (int n, char* names, char* fn) {
     else return (q * 100) / qtot;
 }
 
+void notification_init (NotifyNotification** notification) {
+    notify_init("pwrnotify");
+    *notification = notify_notification_new("", "", "");
+    notify_notification_set_timeout(*notification, NOTIFY_EXPIRES_NEVER);
+}
+
+int notification_show (NotifyNotification* notification, char* body, int q) {
+    // should have 0 <= q <= 100, but use snprintf just in case
+    snprintf(body, 26, "Battery level is at %d%%.\n", q);
+    notify_notification_update(notification, "Low Battery", body,
+                               "dialog-warning");
+    GError* e = NULL;
+    if (!notify_notification_show(notification, &e)) {
+        printf("error: %s\n", e->message);
+        return 0;
+    } else return 1;
+}
+
+void notification_uninit (NotifyNotification** notification) {
+    notify_notification_close(*notification, (GError**) NULL);
+    g_object_unref(G_OBJECT(*notification));
+    notify_uninit();
+}
+
 int main (int argc, char** argv) {
-    const char* version = "0.2.0";
     // parse arguments
     if (argc == 1) {
         fprintf(stderr, "pwrnotify %s \n\
@@ -164,28 +189,26 @@ given.\n\n", version);
     for (i = 0; i < nwarn; i++) {
         if (warn[i] > maxwarn) maxwarn = warn[i];
     }
-    notify_init ("pwrnotify");
-    NotifyNotification* notification = notify_notification_new("", "", "");
-    notify_notification_set_timeout(notification, NOTIFY_EXPIRES_NEVER);
+    NotifyNotification* notification;
+    notification_init(&notification);
     while (1) {
         q = get_charge(nbats, bat_names, fn);
         if (last != q) {
             for (i = 0; i < nwarn; i++) {
                 if (last >= warn[i] && q < warn[i]) {
                     // dipped below a warning level: show notification
-                    // should have 0 <= q <= 100, but use snprintf just in case
-                    snprintf(body, 26, "Battery level is at %d%%.\n", q);
-                    notify_notification_update(notification, "Low Battery",
-                                               body, "dialog-warning");
-                    notify_notification_show(notification, (GError**) NULL);
+                    if (!notification_show(notification, body, q)) {
+                        notification_uninit(&notification);
+                        notification_init(&notification);
+                        notification_show(notification, body, q);
+                    }
                     // already shown: no need to check other warning levels
                     break;
                 }
             }
             if (last < maxwarn && q >= maxwarn) {
-                // newly above all warning levels: hide notification if visible
-                GError** e = NULL;
-                notify_notification_close(notification, e);
+                // newly above all warning levels: hide notification
+                notify_notification_close(notification, (GError**) NULL);
             }
             last = q;
         }
