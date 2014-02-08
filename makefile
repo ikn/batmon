@@ -1,7 +1,6 @@
 PROG := pwrnotify
-CFLAGS += -Wall
-CPPFLAGS += `pkg-config --cflags libnotify`
-LDLIBS += `pkg-config --libs libnotify`
+CFLAGS += -Wall `pkg-config --cflags libnotify`
+LDLIBS += -ldl `pkg-config --libs libnotify`
 INSTALL_PROGRAM := install
 
 prefix := /usr/local

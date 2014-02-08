@@ -1,9 +1,9 @@
-pwrnotify 0.2.1.
+pwrnotify 0.2.1-next.
 
 A lightweight, standalone battery status notifier for Linux.
 
 Uses the newer `/sys/class' interface and doesn't support the deprecated
-(since 2.6.39) `/proc/acpi' one.
+(since Linux 2.6.39) `/proc/acpi' one.
 
 http://ikn.org.uk/pwrnotify
 
@@ -25,7 +25,7 @@ With GNU make or equivalent, run
     make
     make install
 
-The makefile respects the prefix, DESTDIR, etc. arguments.  Of course,
+The makefile respects the `prefix', `DESTDIR', etc. arguments.  Of course,
 `make install' needs to be run as root if installing outside of your home
 directory.  To uninstall, run
 
@@ -35,7 +35,7 @@ directory.  To uninstall, run
 
     USAGE
 
-pwrnotify is installed to /usr/local/bin/ by default, and can be run from there
-or you can just copy the executable elsewhere and run it without installing.
-It takes any number of integer arguments as percentage battery levels to
-display a warning at.
+pwrnotify is installed to `/usr/local/bin/' by default, and can be run from
+there; or you can just copy the executable elsewhere and run it without
+installing.  It takes any number of integer arguments as percentage battery
+levels to display a warning at.

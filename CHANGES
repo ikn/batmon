@@ -1,0 +1,10 @@
+0.2.1-next:
+ * update notification with battery level as it changes
+
+0.2.1:
+ * bug: sometimes doesn't notify
+ * bug: DESTDIR doesn't work properly in makefile
+
+0.2.0:
+ * take warn levels as command-line arguments
+ * stop notifications from expiring
