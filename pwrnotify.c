@@ -9,11 +9,8 @@
  */
 
 // TODO:
-// (getopt/getopt_long)
-// -d --delay (seconds between each check)
-// -r --reload (seconds between each recheck for batteries)
-// -b --background (fork off and die)
-// -l --legacy (use /proc/acpi/ instead of /sys/class/)
+// -f (fork off and die)
+// -l (use /proc/acpi/ instead of /sys/class/)
 
 #include <stdlib.h>
 #include <ctype.h>
@@ -43,6 +40,100 @@ struct state_type {
     NotifyNotification* notification;
     char* closed;
 };
+
+void print_version () {
+    printf("pwrnotify %s\n", version);
+}
+
+void print_help () {
+    printf("Usage: pwrnotify [OPTIONS] LEVEL [LEVEL...]\n\
+\n\
+Display a warning at percentage battery LEVELs.\n\
+\n\
+Returns 2 if invalid arguments are given.\n\
+\n\
+Options:\n\
+    -h              print this help message\n\
+    -v              print program version information\n\
+    -d STATEDELAY   check battery state every STATEDELAY seconds\n\
+                    (default: 20)\n\
+    -b BATDELAY     check which batteries are present every BATDELAY seconds\n\
+                    (default: 300)\n\
+\n");
+}
+
+int check_pos_opt (char opt, int* val) {
+    // returns failure
+    // sscanf allows trailing non-digit characters
+    int i, n = strlen(optarg), err = 0;
+    for (i = 0; i < n; i++) {
+        if (!isdigit(optarg[i])) {
+            err = 1;
+            break;
+        }
+    }
+
+    if (sscanf(optarg, "%d", val) != 1)  err = 1;
+
+    if (err) {
+        fprintf(stderr, "\
+error: invalid argument to option '-%c': '%s' (expected int)\n", opt, optarg);
+        return 1;
+    }
+
+    if (*val < 1) {
+        fprintf(
+            stderr, "\
+error: invalid argument to option '-%c': '%d' (expected > 0)\n", opt, *val);
+        return 1;
+    }
+    return 0;
+}
+
+int parse_args (int argc, char** argv, char** warn, int* nwarn) {
+    // returns failure
+    *nwarn = argc - optind;
+    if (*nwarn == 0) {
+        fprintf(stderr, "error: expected at least one argument\n\n");
+        print_help();
+        return 1;
+    }
+
+    // read in warning levels; duplicates aren't a problem so don't bother
+    // checking for them
+    int err, i, j, n, val;
+    char* arg;
+    *warn = malloc(*nwarn * sizeof(char));
+    for (i = 0; i < *nwarn; i++) {
+        err = 0;
+        arg = argv[optind + i];
+        n = strlen(arg);
+        if (n == 0) err = 1;
+        else {
+            for (j = 0; j < n; j++) {
+                if (!isdigit(arg[j])) {
+                    err = 1;
+                    break;
+                }
+            }
+        }
+        if (!err && sscanf(arg, "%d", &val) != 1) err = 1;
+        if (err) {
+            fprintf(stderr, "error: invalid argument '%s' (expected int)\n",
+                    arg);
+            return 1;
+        }
+        if (val < 0 || val > 100) {
+            fprintf(
+                stderr, "error: invalid argument '%d' (expected percentage)\n",
+                val
+            );
+            return 1;
+        }
+        *warn[i] = val;
+    }
+    return 0;
+}
 
 gboolean get_bats (struct state_type* state) {
     // get available power supplies
@@ -211,45 +302,39 @@ gboolean check_bats (struct state_type* state) {
 }
 
 int main (int argc, char** argv) {
-    // parse arguments
-    if (argc == 1) {
-        fprintf(stderr, "pwrnotify %s \n\
-\n\
-Takes any number of integer arguments as percentage battery levels to \n\
-display a warning at.\n\
-\n\
-Returns 2 if invalid arguments are given.\n\n", version);
-        return 0;
+    // parse options
+    int c, charge_check_delay = 20, bat_check_delay = 300;
+    while (1) {
+        c = getopt(argc, argv, "hvd:r:");
+        if (c == -1)
+            // no more options
+            break;
+        switch (c) {
+            case 'h':
+                print_version();
+                printf("\n");
+                print_help();
+                return 0;
+                break;
+            case 'v':
+                print_version();
+                return 0;
+                break;
+            case 'd':
+                if (check_pos_opt('d', &charge_check_delay)) return 2;
+                break;
+            case 'r':
+                if (check_pos_opt('r', &bat_check_delay)) return 2;
+                break;
+            case '?':
+                return 2;
+        }
     }
-    // read in warning levels; duplicates aren't a problem so don't bother
-    // checking for them
-    int err, i, j, n, val, nwarn = argc - 1;
-    char* warn = malloc(nwarn * sizeof(char)), * arg;
-    for (i = 0; i < nwarn; i++) {
-        err = 0;
-        arg = argv[i + 1];
-        n = strlen(arg);
-        if (n == 0) err = 1;
-        else {
-            for (j = 0; j < n; j++) {
-                if (!isdigit(arg[j])) {
-                    err = 1;
-                    break;
-                }
-            }
-        }
-        if (!err && sscanf(arg, "%d", &val) != 1) err = 1;
-        if (err) {
-            fprintf(stderr, "invalid argument '%s' (expected int)\n", arg);
-            return 2;
-        }
-        if (val < 0 || val > 100) {
-            fprintf(stderr, "invalid argument '%d' (expected percentage)\n",
-                    val);
-            return 2;
-        }
-        warn[i] = val;
-    }
+
+    int nwarn;
+    char* warn;
+    int err = parse_args(argc, argv, &warn, &nwarn);
+    if (err) return 2;
 
     // set up state and notification
     struct state_type* state = malloc(sizeof(struct state_type));
@@ -258,6 +343,7 @@ Returns 2 if invalid arguments are given.\n\n", version);
     state->handler_id = (gulong*) NULL;
     state->maxwarn = 0;
     state->last = 100;
+    int i;
     for (i = 0; i < nwarn; i++) {
         if (warn[i] > state->maxwarn) state->maxwarn = warn[i];
     }
@@ -275,8 +361,10 @@ Returns 2 if invalid arguments are given.\n\n", version);
     // check battery state now and periodically
     get_bats(state);
     check_bats(state);
-    g_timeout_add_seconds(300, (gboolean (*)(gpointer)) &get_bats, state);
-    g_timeout_add_seconds(20, (gboolean (*)(gpointer)) &check_bats, state);
+    g_timeout_add_seconds(bat_check_delay, (gboolean (*)(gpointer)) &get_bats,
+                          state);
+    g_timeout_add_seconds(charge_check_delay,
+                          (gboolean (*)(gpointer)) &check_bats, state);
 
     while (1) {
         // check if we have any signals to handle
