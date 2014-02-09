@@ -9,10 +9,9 @@
  */
 
 // TODO:
-// if killed, close notification
 // recheck for batteries every now and then (ie. don't exit if none found (but still warn))
 // (getopt/getopt_long)
-// -t --time (seconds between each check)
+// -d --delay (seconds between each check)
 // -r --reload (seconds between each recheck for batteries)
 // -b --background (fork off and die)
 // -l --legacy (use /proc/acpi/ instead of /sys/class/)
@@ -23,6 +22,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <dirent.h>
+#include <signal.h>
+#include <unistd.h>
 #include <libnotify/notify.h>
 
 #include <glib-object.h>
@@ -128,11 +129,11 @@ void notification_init (NotifyNotification** notification,
     notify_init("pwrnotify");
     *notification = notify_notification_new("", "", "");
     notify_notification_set_timeout(*notification, NOTIFY_EXPIRES_NEVER);
-    gulong id;
     if (*handler_id == (gulong*) NULL) {
-        id = g_signal_connect(*notification, "closed",
-                              G_CALLBACK(notification_closed), closed);
-        *handler_id = &id;
+        *handler_id = malloc(sizeof(gulong));
+        **handler_id = g_signal_connect(
+            *notification, "closed", G_CALLBACK(notification_closed), closed
+        );
     }
 }
 
@@ -155,6 +156,7 @@ void notification_uninit (NotifyNotification** notification,
     notify_notification_close(*notification, (GError**) NULL);
     if (*handler_id != (gulong*) NULL) {
         g_signal_handler_disconnect(*notification, **handler_id);
+        free(*handler_id);
         *handler_id = (gulong*) NULL;
     }
     g_object_unref(G_OBJECT(*notification));
@@ -175,10 +177,11 @@ void notification_try_show (NotifyNotification* notification, char* body,
 }
 
 gboolean check_bats (struct state_type* state) {
-    char q = get_charge(state->nbats, state->bat_names, state->fn);
+    char q = get_charge(state->nbats, state->bat_names, state->fn), updated;
+    int i;
     if (state->last != q) {
-        char updated = 0;
-        for (int i = 0; i < state->nwarn; i++) {
+        updated = 0;
+        for (i = 0; i < state->nwarn; i++) {
             if (state->last >= state->warn[i] && q < state->warn[i]) {
                 // dipped below a warning level: show notification
                 notification_try_show(state->notification, state->body, q,
@@ -252,30 +255,52 @@ given.\n\n", version);
         return 1;
     }
 
-    // periodic check
-    struct state_type state;
-    state.nwarn = nwarn;
-    state.warn = warn;
-    state.nbats = nbats;
-    state.bat_names = bat_names;
-    state.handler_id = (gulong*) NULL;
-    state.fn = malloc((24 + n_max + 12 + 1) * sizeof(char));
-    state.maxwarn = 0;
-    state.last = 100;
+    // set up state and notification
+    struct state_type* state = malloc(sizeof(struct state_type));
+    state->nwarn = nwarn;
+    state->warn = warn;
+    state->nbats = nbats;
+    state->bat_names = bat_names;
+    state->handler_id = (gulong*) NULL;
+    state->fn = malloc((24 + n_max + 12 + 1) * sizeof(char));
+    state->maxwarn = 0;
+    state->last = 100;
     for (i = 0; i < nwarn; i++) {
-        if (warn[i] > state.maxwarn) state.maxwarn = warn[i];
+        if (warn[i] > state->maxwarn) state->maxwarn = warn[i];
     }
-    state.closed = malloc(sizeof(char));
-    *state.closed = 1;
-    notification_init(&state.notification, &state.handler_id, state.closed);
+    state->closed = malloc(sizeof(char));
+    *state->closed = 1;
+    notification_init(&state->notification, &state->handler_id, state->closed);
 
-    check_bats(&state);
-    g_timeout_add_seconds(20, (gboolean (*)(gpointer)) &check_bats, &state);
-    GMainLoop* loop = g_main_loop_new((GMainContext*) NULL, FALSE);
-    g_main_loop_run(loop);
+    // block signals we want to handle
+    sigset_t sig_set;
+    sigemptyset(&sig_set);
+    sigaddset(&sig_set, SIGINT);
+    sigaddset(&sig_set, SIGTERM);
+    sigprocmask(SIG_BLOCK, &sig_set, (sigset_t *) NULL);
 
-    free(state.fn);
-    free(state.bat_names);
-    free(state.closed);
+    // check battery state now and periodically
+    check_bats(state);
+    g_timeout_add_seconds(20, (gboolean (*)(gpointer)) &check_bats, state);
+
+    while (1) {
+        // check if we have any signals to handle
+        if (sigpending(&sig_set) == 0) {
+            if (sigismember(&sig_set, SIGINT) ||
+                sigismember(&sig_set, SIGTERM)) break;
+        }
+        g_main_context_iteration((GMainContext*) NULL, FALSE);
+        usleep(200000);
+    }
+
+    // cleanup
+    // frees handler_id if allocated
+    notification_uninit(&state->notification, &state->handler_id);
+    g_main_context_iteration((GMainContext*) NULL, FALSE);
+    free(warn);
+    free(bat_names);
+    free(state->fn);
+    free(state->closed);
+    free(state);
     return 0;
 }

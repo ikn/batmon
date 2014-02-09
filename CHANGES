@@ -1,5 +1,6 @@
 0.2.1-next:
  * update notification with battery level as it changes
+ * close and destroy notification when killed
 
 0.2.1:
  * bug: sometimes doesn't notify
