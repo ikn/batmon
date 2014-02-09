@@ -1,7 +1,8 @@
-0.2.1-next:
+0.2.2:
  * update notification with battery level as it changes
  * close and destroy notification when killed
  * command-line options to control check frequency
+ * command-line option: -f: fork off and die
  * periodically re-check which batteries are connected
 
 0.2.1:

@@ -9,7 +9,6 @@
  */
 
 // TODO:
-// -f (fork off and die)
 // -l (use /proc/acpi/ instead of /sys/class/)
 
 #include <stdlib.h>
@@ -59,6 +58,7 @@ Options:\n\
                     (default: 20)\n\
     -b BATDELAY     check which batteries are present every BATDELAY seconds\n\
                     (default: 300)\n\
+    -f              fork off and die\n\
 \n");
 }
 
@@ -303,9 +303,9 @@ gboolean check_bats (struct state_type* state) {
 
 int main (int argc, char** argv) {
     // parse options
-    int c, charge_check_delay = 20, bat_check_delay = 300;
+    int c, charge_check_delay = 20, bat_check_delay = 300, do_fork = 0;
     while (1) {
-        c = getopt(argc, argv, "hvd:r:");
+        c = getopt(argc, argv, "hvd:b:f");
         if (c == -1)
             // no more options
             break;
@@ -323,8 +323,11 @@ int main (int argc, char** argv) {
             case 'd':
                 if (check_pos_opt('d', &charge_check_delay)) return 2;
                 break;
-            case 'r':
-                if (check_pos_opt('r', &bat_check_delay)) return 2;
+            case 'b':
+                if (check_pos_opt('b', &bat_check_delay)) return 2;
+                break;
+            case 'f':
+                do_fork = 1;
                 break;
             case '?':
                 return 2;
@@ -335,6 +338,17 @@ int main (int argc, char** argv) {
     char* warn;
     int err = parse_args(argc, argv, &warn, &nwarn);
     if (err) return 2;
+
+    // fork
+    if (do_fork) {
+        pid_t p = fork();
+        if (p > 0) {
+            // parent
+            return 0;
+        } else if (p == -1) {
+            fprintf(stderr, "warning: forking failed\n");
+        } // else child
+    }
 
     // set up state and notification
     struct state_type* state = malloc(sizeof(struct state_type));
