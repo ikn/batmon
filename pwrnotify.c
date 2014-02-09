@@ -9,7 +9,6 @@
  */
 
 // TODO:
-// recheck for batteries every now and then (ie. don't exit if none found (but still warn))
 // (getopt/getopt_long)
 // -d --delay (seconds between each check)
 // -r --reload (seconds between each recheck for batteries)
@@ -45,29 +44,32 @@ struct state_type {
     char* closed;
 };
 
-void get_bats (char** bat_names, int* nbats, int* n_max) {
+gboolean get_bats (struct state_type* state) {
     // get available power supplies
+    if (state->bat_names != (char*) NULL) free(state->bat_names);
+    if (state->fn != (char*) NULL) free(state->fn);
+
     DIR* dir = opendir("/sys/class/power_supply/");
     if (dir == (DIR*) NULL) {
-        *nbats = 0;
-        return;
+        state->nbats = 0;
+        return G_SOURCE_CONTINUE;
     }
     struct dirent* entry = readdir(dir);
     struct dirent* next;
     int err;
-    char buf[7];
+    char buf[7], * fn;
     const int mem_blk = 50; // chars to allocate at a time
-    int n, nchars = 0, nalloc = 0;
-    *bat_names = (char*) NULL;
-    *nbats = 0;
-    *n_max = 0;
+    int n, nchars = 0, nalloc = 0, n_max = 0;
+    state->bat_names = (char*) NULL;
+    state->nbats = 0;
+
     while (entry != (struct dirent*) NULL) {
         // skip if . or ..
         if (strcmp(entry->d_name, ".") != 0 &&
             strcmp(entry->d_name, "..") != 0) {
             n = strlen(entry->d_name);
             // check supply's type
-            char* fn = malloc((24 + n + 5 + 1) * sizeof(char));
+            fn = malloc((24 + n + 5 + 1) * sizeof(char));
             sprintf(fn, "/sys/class/power_supply/%s/type", entry->d_name);
             FILE* f = fopen(fn, "r");
             free(fn);
@@ -76,16 +78,17 @@ void get_bats (char** bat_names, int* nbats, int* n_max) {
                 fclose(f);
                 // skip if not a battery
                 if (strncmp(buf, "Battery", 7) == 0) { // buf has no \0
-                    (*nbats)++;
+                    (state->nbats)++;
                     while (nchars + n + 1 > nalloc) {
                         // need more room for names
                         nalloc += mem_blk;
-                        *bat_names = realloc(*bat_names,
-                                             nalloc * sizeof(char));
+                        state->bat_names = realloc(
+                            state->bat_names, nalloc * sizeof(char)
+                        );
                     }
-                    strcpy(*bat_names + nchars, entry->d_name);
+                    strcpy(state->bat_names + nchars, entry->d_name);
                     nchars += n + 1;
-                    if (n > *n_max) *n_max = n;
+                    if (n > n_max) n_max = n;
                 }
             }
         }
@@ -93,7 +96,10 @@ void get_bats (char** bat_names, int* nbats, int* n_max) {
         if (err != 0) entry = (struct dirent*) NULL;
         entry = next;
     }
+
     closedir(dir);
+    state->fn = malloc((24 + n_max + 12 + 1) * sizeof(char));
+    return G_SOURCE_CONTINUE;
 }
 
 int get_charge_from_file (char* bat_name, char* file_name, char* fn) {
@@ -115,7 +121,7 @@ int get_charge (int n, char* bat_names, char* fn) {
         qtot += get_charge_from_file(bat_names, "full", fn);
         bat_names += strlen(bat_names);
     }
-    if (qtot == 0) return 0;
+    if (qtot == 0) return 100;
     else if (q > qtot) return 100;
     else return (q * 100) / qtot;
 }
@@ -212,8 +218,7 @@ int main (int argc, char** argv) {
 Takes any number of integer arguments as percentage battery levels to \n\
 display a warning at.\n\
 \n\
-Returns 1 if no batteries could be found, and 2 if invalid arguments are \
-given.\n\n", version);
+Returns 2 if invalid arguments are given.\n\n", version);
         return 0;
     }
     // read in warning levels; duplicates aren't a problem so don't bother
@@ -246,23 +251,11 @@ given.\n\n", version);
         warn[i] = val;
     }
 
-    // get batteries
-    char* bat_names;
-    int nbats, n_max;
-    get_bats(&bat_names, &nbats, &n_max);
-    if (nbats == 0) {
-        fprintf(stderr, "error: no batteries detected\n");
-        return 1;
-    }
-
     // set up state and notification
     struct state_type* state = malloc(sizeof(struct state_type));
     state->nwarn = nwarn;
     state->warn = warn;
-    state->nbats = nbats;
-    state->bat_names = bat_names;
     state->handler_id = (gulong*) NULL;
-    state->fn = malloc((24 + n_max + 12 + 1) * sizeof(char));
     state->maxwarn = 0;
     state->last = 100;
     for (i = 0; i < nwarn; i++) {
@@ -280,7 +273,9 @@ given.\n\n", version);
     sigprocmask(SIG_BLOCK, &sig_set, (sigset_t *) NULL);
 
     // check battery state now and periodically
+    get_bats(state);
     check_bats(state);
+    g_timeout_add_seconds(300, (gboolean (*)(gpointer)) &get_bats, state);
     g_timeout_add_seconds(20, (gboolean (*)(gpointer)) &check_bats, state);
 
     while (1) {
@@ -298,7 +293,7 @@ given.\n\n", version);
     notification_uninit(&state->notification, &state->handler_id);
     g_main_context_iteration((GMainContext*) NULL, FALSE);
     free(warn);
-    free(bat_names);
+    free(state->bat_names);
     free(state->fn);
     free(state->closed);
     free(state);
