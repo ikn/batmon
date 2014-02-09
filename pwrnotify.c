@@ -1,5 +1,5 @@
 /*
- * pwrnotify version 0.2.1-next
+ * pwrnotify version 0.2.2
  *
  * a lightweight, standalone battery status notifier
  *
@@ -24,7 +24,7 @@
 #include <glib-object.h>
 #include <glib.h>
 
-static const char* version = "0.2.1-next";
+static const char* version = "0.2.2";
 
 struct state_type {
     int nwarn;
@@ -130,7 +130,7 @@ int parse_args (int argc, char** argv, char** warn, int* nwarn) {
             );
             return 1;
         }
-        *warn[i] = val;
+        (*warn)[i] = val;
     }
     return 0;
 }
