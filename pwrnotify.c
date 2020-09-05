@@ -9,7 +9,7 @@
  */
 
 // TODO:
-// -l (use /proc/acpi/ instead of /sys/class/)
+// optionally display time remaining estimation
 
 #include <stdlib.h>
 #include <ctype.h>

@@ -5,7 +5,7 @@ A lightweight, standalone battery status notifier for Linux.
 Uses the newer `/sys/class' interface and doesn't support the deprecated
 (since Linux 2.6.39) `/proc/acpi' one.
 
-http://ikn.org.uk/pwrnotify
+http://ikn.org.uk/tool/pwrnotify
 
     LICENSE
 
